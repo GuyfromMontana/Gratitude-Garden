@@ -36,7 +36,7 @@ function MemoryUpload({ userId }) {
     setDragOver(false)
     
     const file = e.dataTransfer.files[0]
-    if (file && file.type.startsWith('image/')) {
+    if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
       handleFileSelect(file)
     }
   }
@@ -185,34 +185,46 @@ function MemoryUpload({ userId }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           onChange={handleFileInputChange}
           style={{ display: 'none' }}
         />
         
         {previewUrl ? (
           <div style={{ textAlign: 'center' }}>
-            <img 
-              src={previewUrl} 
-              alt="Preview" 
-              style={{ 
-                maxWidth: '100%', 
-                maxHeight: '200px', 
-                borderRadius: '8px',
-                marginBottom: '1rem'
-              }} 
-            />
-            <p style={{ color: 'var(--sage-green)' }}>
-              <Check size={16} style={{ marginRight: '0.5rem' }} />
-              {selectedFile.name}
-            </p>
-            <span>Click to change image</span>
+            {selectedFile.type === 'application/pdf' ? (
+              <div style={{ marginBottom: '1rem' }}>
+                <FileText size={48} style={{ color: 'var(--soft-gold)' }} />
+                <p style={{ color: 'var(--sage-green)', marginTop: '0.5rem' }}>
+                  <Check size={16} style={{ marginRight: '0.5rem' }} />
+                  {selectedFile.name}
+                </p>
+              </div>
+            ) : (
+              <>
+                <img 
+                  src={previewUrl} 
+                  alt="Preview" 
+                  style={{ 
+                    maxWidth: '100%', 
+                    maxHeight: '200px', 
+                    borderRadius: '8px',
+                    marginBottom: '1rem'
+                  }} 
+                />
+                <p style={{ color: 'var(--sage-green)' }}>
+                  <Check size={16} style={{ marginRight: '0.5rem' }} />
+                  {selectedFile.name}
+                </p>
+              </>
+            )}
+            <span>Click to change file</span>
           </div>
         ) : (
           <>
             <Image className="upload-icon" size={48} />
-            <p>Drop your scanned image here, or click to browse</p>
-            <span>Supports JPG, PNG, and other image formats</span>
+            <p>Drop your scanned image or PDF here, or click to browse</p>
+            <span>Supports JPG, PNG, PDF, and other image formats</span>
           </>
         )}
       </div>
