@@ -3,6 +3,7 @@ import { Upload, Image, FileText, Loader, Check, AlertCircle } from 'lucide-reac
 import { uploadMemoryImage, createMemory, createGratitudeEntries } from '../lib/supabase'
 import { extractGratitudeEntries } from '../lib/ai-extraction'
 import * as pdfjsLib from 'pdfjs-dist'
+import mammoth from 'mammoth'
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
@@ -78,7 +79,11 @@ function MemoryUpload({ userId }) {
     if (file && (
       file.type.startsWith('image/') || 
       file.type === 'application/pdf' ||
-      file.type.startsWith('audio/')
+      file.type.startsWith('audio/') ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      file.type === 'application/msword' ||
+      file.name.endsWith('.docx') ||
+      file.name.endsWith('.doc')
     )) {
       handleFileSelect(file)
     }
@@ -98,6 +103,13 @@ function MemoryUpload({ userId }) {
       type = 'pdf'
     } else if (file.type.startsWith('audio/')) {
       type = 'audio'
+    } else if (
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      file.type === 'application/msword' ||
+      file.name.endsWith('.docx') ||
+      file.name.endsWith('.doc')
+    ) {
+      type = 'docx'
     }
     
     setFileType(type)
@@ -124,6 +136,10 @@ function MemoryUpload({ userId }) {
       // For audio, just set the file and create URL for audio player
       setSelectedFile(file)
       setPreviewUrl(URL.createObjectURL(file))
+    } else if (type === 'docx') {
+      // For Word docs, just set the file (no preview URL needed)
+      setSelectedFile(file)
+      setPreviewUrl(null) // No visual preview for docs
     } else {
       // Regular image
       setSelectedFile(file)
@@ -261,6 +277,37 @@ function MemoryUpload({ userId }) {
     }
   }
 
+  // Extract text from Word document using mammoth
+  async function extractTextFromWord() {
+    if (!selectedFile) return
+
+    try {
+      setProcessing(true)
+      setProcessingStep('Extracting text from Word document...')
+      setError(null)
+
+      // Read file as ArrayBuffer
+      const arrayBuffer = await selectedFile.arrayBuffer()
+
+      // Extract text using mammoth
+      const result = await mammoth.extractRawText({ arrayBuffer })
+      
+      if (result.messages.length > 0) {
+        console.warn('Mammoth conversion messages:', result.messages)
+      }
+
+      setExtractedText(result.value)
+      setProcessingStep('')
+      
+    } catch (err) {
+      console.error('Word extraction error:', err)
+      setError('Could not extract text from Word document. Please copy and paste the text manually.')
+    } finally {
+      setProcessing(false)
+      setProcessingStep('')
+    }
+  }
+
   function handleMetadataChange(field, value) {
     setMetadata(prev => ({
       ...prev,
@@ -391,12 +438,12 @@ function MemoryUpload({ userId }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,application/pdf,audio/*"
+          accept="image/*,application/pdf,audio/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={handleFileInputChange}
           style={{ display: 'none' }}
         />
         
-        {previewUrl ? (
+        {(previewUrl || fileType === 'docx') ? (
           <div style={{ textAlign: 'center' }}>
             {fileType === 'audio' ? (
               <>
@@ -441,6 +488,39 @@ function MemoryUpload({ userId }) {
                   <p style={{ fontSize: '0.8rem', fontStyle: 'italic', marginTop: '0.5rem' }}>
                     Uses OpenAI Whisper (~$0.006/minute)
                   </p>
+                </div>
+              </>
+            ) : fileType === 'docx' ? (
+              <>
+                <FileText size={48} style={{ color: 'var(--soft-gold)', marginBottom: '1rem' }} />
+                <p style={{ color: 'var(--sage-green)', marginBottom: '1rem' }}>
+                  <Check size={16} style={{ marginRight: '0.5rem' }} />
+                  {selectedFile.name}
+                </p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    extractTextFromWord()
+                  }}
+                  disabled={processing}
+                  className="btn btn-primary"
+                  style={{ marginTop: '1rem' }}
+                >
+                  {processing && processingStep.includes('Word') ? (
+                    <>
+                      <Loader className="processing-spinner" size={16} />
+                      Extracting...
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={16} />
+                      Extract Text from Document
+                    </>
+                  )}
+                </button>
+                <div style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--warm-gray)' }}>
+                  <p>Click to extract text from your Word document.</p>
                 </div>
               </>
             ) : (
@@ -488,8 +568,8 @@ function MemoryUpload({ userId }) {
         ) : (
           <>
             <Image className="upload-icon" size={48} />
-            <p>Drop your scanned image, PDF, or audio file here, or click to browse</p>
-            <span>Supports JPG, PNG, PDF, MP3, MP4, M4A, WAV, and other formats</span>
+            <p>Drop your scanned image, PDF, Word doc, or audio file here, or click to browse</p>
+            <span>Supports JPG, PNG, PDF, DOCX, DOC, MP3, MP4, M4A, WAV, and other formats</span>
           </>
         )}
       </div>
