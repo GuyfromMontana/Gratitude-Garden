@@ -11,6 +11,7 @@ function MemoryUpload({ userId }) {
   const [dragOver, setDragOver] = useState(false)
   const [selectedFile, setSelectedFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [fileType, setFileType] = useState(null) // 'image', 'pdf', 'audio'
   const [extractedText, setExtractedText] = useState('')
   const [metadata, setMetadata] = useState({
     source_type: 'card',
@@ -74,7 +75,11 @@ function MemoryUpload({ userId }) {
     setDragOver(false)
     
     const file = e.dataTransfer.files[0]
-    if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
+    if (file && (
+      file.type.startsWith('image/') || 
+      file.type === 'application/pdf' ||
+      file.type.startsWith('audio/')
+    )) {
       handleFileSelect(file)
     }
   }
@@ -87,14 +92,25 @@ function MemoryUpload({ userId }) {
   }
 
   async function handleFileSelect(file) {
-    // If it's a PDF, convert to image first
+    // Determine file type
+    let type = 'image'
     if (file.type === 'application/pdf') {
+      type = 'pdf'
+    } else if (file.type.startsWith('audio/')) {
+      type = 'audio'
+    }
+    
+    setFileType(type)
+    
+    // If it's a PDF, convert to image first
+    if (type === 'pdf') {
       try {
         setProcessing(true)
         setProcessingStep('Converting PDF to image...')
         const imageFile = await convertPdfToImage(file)
         setSelectedFile(imageFile)
         setPreviewUrl(URL.createObjectURL(imageFile))
+        setFileType('image') // Now it's an image
         setProcessing(false)
         setProcessingStep('')
       } catch (err) {
@@ -104,7 +120,12 @@ function MemoryUpload({ userId }) {
         setProcessingStep('')
         return
       }
+    } else if (type === 'audio') {
+      // For audio, just set the file and create URL for audio player
+      setSelectedFile(file)
+      setPreviewUrl(URL.createObjectURL(file))
     } else {
+      // Regular image
       setSelectedFile(file)
       setPreviewUrl(URL.createObjectURL(file))
     }
@@ -188,6 +209,12 @@ function MemoryUpload({ userId }) {
       setProcessing(false)
       setProcessingStep('')
     }
+  }
+
+  // Placeholder for audio transcription - will add Whisper API later
+  async function transcribeAudio() {
+    setError('Audio transcription will be added in a future update. For now, please listen to the audio and type the text manually.')
+    // TODO: Add Whisper API or AssemblyAI integration
   }
 
   function handleMetadataChange(field, value) {
@@ -320,53 +347,80 @@ function MemoryUpload({ userId }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,application/pdf"
+          accept="image/*,application/pdf,audio/*"
           onChange={handleFileInputChange}
           style={{ display: 'none' }}
         />
         
         {previewUrl ? (
           <div style={{ textAlign: 'center' }}>
-            <img 
-              src={previewUrl} 
-              alt="Preview" 
-              style={{ 
-                maxWidth: '100%', 
-                maxHeight: '200px', 
-                borderRadius: '8px',
-                marginBottom: '1rem'
-              }} 
-            />
-            <p style={{ color: 'var(--sage-green)' }}>
-              <Check size={16} style={{ marginRight: '0.5rem' }} />
-              {selectedFile.name}
-            </p>
-            <button
-              type="button"
-              onClick={extractTextFromImage}
-              disabled={processing}
-              className="btn btn-primary"
-              style={{ marginTop: '1rem' }}
-            >
-              {processing && processingStep.includes('Reading') ? (
-                <>
-                  <Loader className="processing-spinner" size={16} />
-                  Extracting text...
-                </>
-              ) : (
-                <>
-                  <FileText size={16} />
-                  Extract Text from Image
-                </>
-              )}
-            </button>
+            {fileType === 'audio' ? (
+              <>
+                <FileText size={48} style={{ color: 'var(--soft-gold)', marginBottom: '1rem' }} />
+                <p style={{ color: 'var(--sage-green)', marginBottom: '1rem' }}>
+                  <Check size={16} style={{ marginRight: '0.5rem' }} />
+                  {selectedFile.name}
+                </p>
+                <audio 
+                  controls 
+                  src={previewUrl}
+                  style={{ 
+                    width: '100%', 
+                    maxWidth: '400px',
+                    marginBottom: '1rem'
+                  }}
+                />
+                <div style={{ marginTop: '1rem', fontSize: '0.9rem', color: 'var(--warm-gray)' }}>
+                  <p>Listen to your audio, then type or paste the text below.</p>
+                  <p style={{ fontSize: '0.85rem', fontStyle: 'italic', marginTop: '0.5rem' }}>
+                    (Auto-transcription coming soon)
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <img 
+                  src={previewUrl} 
+                  alt="Preview" 
+                  style={{ 
+                    maxWidth: '100%', 
+                    maxHeight: '200px', 
+                    borderRadius: '8px',
+                    marginBottom: '1rem'
+                  }} 
+                />
+                <p style={{ color: 'var(--sage-green)' }}>
+                  <Check size={16} style={{ marginRight: '0.5rem' }} />
+                  {selectedFile.name}
+                </p>
+                <button
+                  type="button"
+                  onClick={extractTextFromImage}
+                  disabled={processing}
+                  className="btn btn-primary"
+                  style={{ marginTop: '1rem' }}
+                >
+                  {processing && processingStep.includes('Reading') ? (
+                    <>
+                      <Loader className="processing-spinner" size={16} />
+                      Extracting text...
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={16} />
+                      Extract Text from Image
+                    </>
+                  )}
+                </button>
+              </>
+            )}
             <span style={{ display: 'block', marginTop: '1rem' }}>Click to change file</span>
           </div>
         ) : (
           <>
             <Image className="upload-icon" size={48} />
-            <p>Drop your scanned image or PDF here, or click to browse</p>
-            <span>Supports JPG, PNG, PDF, and other image formats</span>
+            <p>Drop your scanned image, PDF, or audio file here, or click to browse</p>
+            <span>Supports JPG, PNG, PDF, MP3, MP4, M4A, WAV, and other formats</span>
           </>
         )}
       </div>
@@ -403,6 +457,7 @@ function MemoryUpload({ userId }) {
             <option value="note">Note</option>
             <option value="email">Printed Email</option>
             <option value="photo">Photo with writing</option>
+            <option value="audio">Audio/Voicemail</option>
             <option value="other">Other</option>
           </select>
         </div>
