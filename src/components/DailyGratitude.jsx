@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react'
-import { Heart, Leaf, Snowflake, Sun, Cloud, Calendar } from 'lucide-react'
-import { getDailyGratitude, markAsViewed } from '../lib/supabase'
+import React, { useState, useEffect, useRef } from 'react'
+import { Heart, Leaf, Snowflake, Sun, Cloud, Calendar, Volume2, Loader, Square } from 'lucide-react'
+import { getDailyGratitude, markAsViewed, getVoiceForSender } from '../lib/supabase'
 import { 
   getFormattedDate, 
   getSurfacingDisplayText, 
   getCurrentSeason,
   getSeasonalGreeting 
 } from '../lib/surfacing-logic'
+import { generateSpeech, prepareTextForSpeech, FALLBACK_VOICE_ID } from '../lib/elevenlabs'
 import ReflectionInput from './ReflectionInput'
 
 // Season icons
@@ -30,12 +31,30 @@ function DailyGratitude({ userId }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showReflection, setShowReflection] = useState(false)
+  
+  // Audio playback state
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false)
+  const [audioError, setAudioError] = useState(null)
+  const audioRef = useRef(null)
 
   useEffect(() => {
     if (userId) {
       loadDailyGratitude()
     }
   }, [userId])
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        if (audioRef.current.src) {
+          URL.revokeObjectURL(audioRef.current.src)
+        }
+      }
+    }
+  }, [])
 
   async function loadDailyGratitude() {
     try {
@@ -54,6 +73,66 @@ function DailyGratitude({ userId }) {
       setError('Could not load today\'s gratitude seed. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleListen() {
+    // If already playing, stop
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      setIsPlaying(false)
+      return
+    }
+
+    try {
+      setIsLoadingAudio(true)
+      setAudioError(null)
+
+      // Get the voice for this sender
+      let voiceId = FALLBACK_VOICE_ID
+      if (entry.sender_name) {
+        const voiceMapping = await getVoiceForSender(userId, entry.sender_name)
+        if (voiceMapping?.elevenlabs_voice_id) {
+          voiceId = voiceMapping.elevenlabs_voice_id
+        }
+      }
+
+      // Prepare the text to read
+      const textToRead = prepareTextForSpeech(entry.summary_story)
+      
+      // Generate speech
+      const audioUrl = await generateSpeech(textToRead, voiceId)
+
+      // Create or update audio element
+      if (!audioRef.current) {
+        audioRef.current = new Audio()
+      }
+      
+      // Revoke old URL if exists
+      if (audioRef.current.src) {
+        URL.revokeObjectURL(audioRef.current.src)
+      }
+
+      audioRef.current.src = audioUrl
+      
+      audioRef.current.onended = () => {
+        setIsPlaying(false)
+      }
+      
+      audioRef.current.onerror = () => {
+        setAudioError('Failed to play audio')
+        setIsPlaying(false)
+      }
+
+      await audioRef.current.play()
+      setIsPlaying(true)
+
+    } catch (err) {
+      console.error('Error playing audio:', err)
+      setAudioError(err.message || 'Could not play audio. Please try again.')
+    } finally {
+      setIsLoadingAudio(false)
     }
   }
 
@@ -120,6 +199,60 @@ function DailyGratitude({ userId }) {
             <span>{getSurfacingDisplayText(entry.surfacing_reason)}</span>
           </div>
         )}
+
+        {/* Listen Button */}
+        <div className="listen-section" style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={handleListen}
+            disabled={isLoadingAudio}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              fontSize: '0.95rem'
+            }}
+          >
+            {isLoadingAudio ? (
+              <>
+                <Loader className="processing-spinner" size={18} />
+                Generating audio...
+              </>
+            ) : isPlaying ? (
+              <>
+                <Square size={18} />
+                Stop
+              </>
+            ) : (
+              <>
+                <Volume2 size={18} />
+                Listen
+              </>
+            )}
+          </button>
+          
+          {entry.sender_name && (
+            <p style={{ 
+              fontSize: '0.8rem', 
+              color: 'var(--warm-gray)', 
+              marginTop: '0.5rem',
+              fontStyle: 'italic'
+            }}>
+              {isPlaying ? `Playing...` : `From ${entry.sender_name}`}
+            </p>
+          )}
+          
+          {audioError && (
+            <p style={{ 
+              fontSize: '0.85rem', 
+              color: '#c44', 
+              marginTop: '0.5rem' 
+            }}>
+              {audioError}
+            </p>
+          )}
+        </div>
         
         <div className="reflection-section">
           {!showReflection ? (

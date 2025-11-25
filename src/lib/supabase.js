@@ -223,3 +223,109 @@ function inferHolidays(entry) {
   
   return holidays
 }
+
+// ============================================
+// VOICE MANAGEMENT FUNCTIONS
+// ============================================
+
+// Get all voice mappings for a user
+export async function getSenderVoices(userId) {
+  const { data, error } = await supabase
+    .from('sender_voices')
+    .select('*')
+    .eq('user_id', userId)
+    .order('sender_name')
+  
+  if (error) throw error
+  return data || []
+}
+
+// Get voice for a specific sender
+export async function getVoiceForSender(userId, senderName) {
+  // First try exact match
+  let { data, error } = await supabase
+    .from('sender_voices')
+    .select('*')
+    .eq('user_id', userId)
+    .ilike('sender_name', senderName)
+    .single()
+  
+  if (data) return data
+  
+  // If no exact match, get default voice
+  const { data: defaultVoice } = await supabase
+    .from('sender_voices')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_default', true)
+    .single()
+  
+  return defaultVoice || null
+}
+
+// Add or update a sender voice mapping
+export async function upsertSenderVoice(userId, senderName, voiceId, notes = '') {
+  const { data, error } = await supabase
+    .from('sender_voices')
+    .upsert({
+      user_id: userId,
+      sender_name: senderName,
+      elevenlabs_voice_id: voiceId,
+      voice_notes: notes,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id,sender_name'
+    })
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+// Delete a sender voice mapping
+export async function deleteSenderVoice(userId, senderName) {
+  const { error } = await supabase
+    .from('sender_voices')
+    .delete()
+    .eq('user_id', userId)
+    .eq('sender_name', senderName)
+  
+  if (error) throw error
+}
+
+// Set default voice
+export async function setDefaultVoice(userId, senderName) {
+  // First, unset all defaults for this user
+  await supabase
+    .from('sender_voices')
+    .update({ is_default: false })
+    .eq('user_id', userId)
+  
+  // Then set the new default
+  const { data, error } = await supabase
+    .from('sender_voices')
+    .update({ is_default: true })
+    .eq('user_id', userId)
+    .eq('sender_name', senderName)
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+// Get all unique sender names from memories (for voice setup suggestions)
+export async function getUniqueSenders(userId) {
+  const { data, error } = await supabase
+    .from('memories')
+    .select('sender_name')
+    .eq('user_id', userId)
+    .not('sender_name', 'is', null)
+  
+  if (error) throw error
+  
+  // Get unique names
+  const uniqueNames = [...new Set(data.map(m => m.sender_name).filter(Boolean))]
+  return uniqueNames.sort()
+}

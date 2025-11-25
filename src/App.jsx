@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { Home, Upload, BookOpen, Heart, Settings } from 'lucide-react'
+import { Home, Upload, BookOpen, Heart, Volume2 } from 'lucide-react'
 import DailyGratitude from './components/DailyGratitude'
 import MemoryUpload from './components/MemoryUpload'
 import MemoryBrowser from './components/MemoryBrowser'
+import VoiceManagement from './components/VoiceManagement'
 import { supabase } from './lib/supabase'
 
 function App() {
@@ -90,6 +91,10 @@ function App() {
             <BookOpen size={20} />
             <span>Browse</span>
           </NavLink>
+          <NavLink to="/voices" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+            <Volume2 size={20} />
+            <span>Voices</span>
+          </NavLink>
         </nav>
 
         <main className="app-main">
@@ -97,6 +102,7 @@ function App() {
             <Route path="/" element={<DailyGratitude userId={user?.id} />} />
             <Route path="/upload" element={<MemoryUpload userId={user?.id} />} />
             <Route path="/browse" element={<MemoryBrowser userId={user?.id} />} />
+            <Route path="/voices" element={<VoiceManagement userId={user?.id} />} />
           </Routes>
         </main>
 
