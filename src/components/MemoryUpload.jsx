@@ -416,7 +416,10 @@ function MemoryUpload({ userId }) {
                 />
                 <button
                   type="button"
-                  onClick={transcribeAudio}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    transcribeAudio()
+                  }}
                   disabled={processing}
                   className="btn btn-primary"
                   style={{ marginTop: '1rem' }}
@@ -458,7 +461,10 @@ function MemoryUpload({ userId }) {
                 </p>
                 <button
                   type="button"
-                  onClick={extractTextFromImage}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    extractTextFromImage()
+                  }}
                   disabled={processing}
                   className="btn btn-primary"
                   style={{ marginTop: '1rem' }}
