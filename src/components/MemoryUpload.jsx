@@ -55,6 +55,89 @@ function MemoryUpload({ userId }) {
     setSuccess(false)
   }
 
+  async function extractTextFromImage() {
+    if (!selectedFile) return
+    
+    // Only works for images, not PDFs
+    if (selectedFile.type === 'application/pdf') {
+      setError('OCR text extraction only works for images. Please manually type the text for PDFs.')
+      return
+    }
+
+    try {
+      setProcessing(true)
+      setProcessingStep('Reading text from image...')
+      setError(null)
+
+      // Convert image to base64
+      const base64Image = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const base64 = reader.result.split(',')[1]
+          resolve(base64)
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(selectedFile)
+      })
+
+      // Get media type
+      const mediaType = selectedFile.type
+
+      // Call Claude API with vision
+      const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
+      
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 2000,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: mediaType,
+                    data: base64Image
+                  }
+                },
+                {
+                  type: 'text',
+                  text: 'Please extract all the text from this image. This is a scanned card, letter, or note. Transcribe exactly what you see, preserving the original formatting and line breaks as much as possible. Only output the text content, nothing else.'
+                }
+              ]
+            }
+          ]
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to extract text from image')
+      }
+
+      const data = await response.json()
+      const extractedContent = data.content[0].text
+
+      setExtractedText(extractedContent)
+      setProcessingStep('')
+      
+    } catch (err) {
+      console.error('OCR error:', err)
+      setError('Could not extract text from image. Please type it manually.')
+    } finally {
+      setProcessing(false)
+      setProcessingStep('')
+    }
+  }
+
   function handleMetadataChange(field, value) {
     setMetadata(prev => ({
       ...prev,
@@ -216,9 +299,28 @@ function MemoryUpload({ userId }) {
                   <Check size={16} style={{ marginRight: '0.5rem' }} />
                   {selectedFile.name}
                 </p>
+                <button
+                  type="button"
+                  onClick={extractTextFromImage}
+                  disabled={processing}
+                  className="btn btn-primary"
+                  style={{ marginTop: '1rem' }}
+                >
+                  {processing && processingStep.includes('Reading') ? (
+                    <>
+                      <Loader className="processing-spinner" size={16} />
+                      Extracting text...
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={16} />
+                      Extract Text from Image
+                    </>
+                  )}
+                </button>
               </>
             )}
-            <span>Click to change file</span>
+            <span style={{ display: 'block', marginTop: '1rem' }}>Click to change file</span>
           </div>
         ) : (
           <>
