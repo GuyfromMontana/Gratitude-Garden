@@ -211,10 +211,54 @@ function MemoryUpload({ userId }) {
     }
   }
 
-  // Placeholder for audio transcription - will add Whisper API later
+  // Transcribe audio using OpenAI Whisper API
   async function transcribeAudio() {
-    setError('Audio transcription will be added in a future update. For now, please listen to the audio and type the text manually.')
-    // TODO: Add Whisper API or AssemblyAI integration
+    if (!selectedFile) return
+
+    const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
+    
+    if (!OPENAI_API_KEY) {
+      setError('OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your environment variables.')
+      return
+    }
+
+    try {
+      setProcessing(true)
+      setProcessingStep('Transcribing audio... This may take a minute.')
+      setError(null)
+
+      // Create FormData for Whisper API
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('model', 'whisper-1')
+      formData.append('language', 'en') // Can be removed to auto-detect
+      formData.append('response_format', 'text')
+
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error?.message || 'Transcription failed')
+      }
+
+      const transcription = await response.text()
+      
+      setExtractedText(transcription)
+      setProcessingStep('')
+      
+    } catch (err) {
+      console.error('Transcription error:', err)
+      setError(`Could not transcribe audio: ${err.message}. Please type the text manually.`)
+    } finally {
+      setProcessing(false)
+      setProcessingStep('')
+    }
   }
 
   function handleMetadataChange(field, value) {
@@ -370,10 +414,29 @@ function MemoryUpload({ userId }) {
                     marginBottom: '1rem'
                   }}
                 />
-                <div style={{ marginTop: '1rem', fontSize: '0.9rem', color: 'var(--warm-gray)' }}>
-                  <p>Listen to your audio, then type or paste the text below.</p>
-                  <p style={{ fontSize: '0.85rem', fontStyle: 'italic', marginTop: '0.5rem' }}>
-                    (Auto-transcription coming soon)
+                <button
+                  type="button"
+                  onClick={transcribeAudio}
+                  disabled={processing}
+                  className="btn btn-primary"
+                  style={{ marginTop: '1rem' }}
+                >
+                  {processing && processingStep.includes('Transcribing') ? (
+                    <>
+                      <Loader className="processing-spinner" size={16} />
+                      Transcribing...
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={16} />
+                      Transcribe Audio
+                    </>
+                  )}
+                </button>
+                <div style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--warm-gray)' }}>
+                  <p>Click the button above to automatically transcribe the audio.</p>
+                  <p style={{ fontSize: '0.8rem', fontStyle: 'italic', marginTop: '0.5rem' }}>
+                    Uses OpenAI Whisper (~$0.006/minute)
                   </p>
                 </div>
               </>
