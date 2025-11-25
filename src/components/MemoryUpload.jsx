@@ -80,6 +80,7 @@ function MemoryUpload({ userId }) {
       file.type.startsWith('image/') || 
       file.type === 'application/pdf' ||
       file.type.startsWith('audio/') ||
+      file.type.startsWith('video/') ||
       file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       file.type === 'application/msword' ||
       file.name.endsWith('.docx') ||
@@ -103,6 +104,8 @@ function MemoryUpload({ userId }) {
       type = 'pdf'
     } else if (file.type.startsWith('audio/')) {
       type = 'audio'
+    } else if (file.type.startsWith('video/')) {
+      type = 'video'
     } else if (
       file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       file.type === 'application/msword' ||
@@ -132,8 +135,8 @@ function MemoryUpload({ userId }) {
         setProcessingStep('')
         return
       }
-    } else if (type === 'audio') {
-      // For audio, just set the file and create URL for audio player
+    } else if (type === 'audio' || type === 'video') {
+      // For audio/video, set the file and create URL for player
       setSelectedFile(file)
       setPreviewUrl(URL.createObjectURL(file))
     } else if (type === 'docx') {
@@ -438,7 +441,7 @@ function MemoryUpload({ userId }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,application/pdf,audio/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept="image/*,application/pdf,audio/*,video/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={handleFileInputChange}
           style={{ display: 'none' }}
         />
@@ -485,6 +488,52 @@ function MemoryUpload({ userId }) {
                 </button>
                 <div style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--warm-gray)' }}>
                   <p>Click the button above to automatically transcribe the audio.</p>
+                  <p style={{ fontSize: '0.8rem', fontStyle: 'italic', marginTop: '0.5rem' }}>
+                    Uses OpenAI Whisper (~$0.006/minute)
+                  </p>
+                </div>
+              </>
+            ) : fileType === 'video' ? (
+              <>
+                <video 
+                  controls 
+                  src={previewUrl}
+                  style={{ 
+                    width: '100%', 
+                    maxWidth: '400px',
+                    maxHeight: '250px',
+                    borderRadius: '8px',
+                    marginBottom: '1rem'
+                  }}
+                />
+                <p style={{ color: 'var(--sage-green)', marginBottom: '0.5rem' }}>
+                  <Check size={16} style={{ marginRight: '0.5rem' }} />
+                  {selectedFile.name}
+                </p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    transcribeAudio()
+                  }}
+                  disabled={processing}
+                  className="btn btn-primary"
+                  style={{ marginTop: '1rem' }}
+                >
+                  {processing && processingStep.includes('Transcribing') ? (
+                    <>
+                      <Loader className="processing-spinner" size={16} />
+                      Transcribing...
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={16} />
+                      Transcribe Video Audio
+                    </>
+                  )}
+                </button>
+                <div style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--warm-gray)' }}>
+                  <p>Click to transcribe the audio track from the video.</p>
                   <p style={{ fontSize: '0.8rem', fontStyle: 'italic', marginTop: '0.5rem' }}>
                     Uses OpenAI Whisper (~$0.006/minute)
                   </p>
@@ -568,8 +617,8 @@ function MemoryUpload({ userId }) {
         ) : (
           <>
             <Image className="upload-icon" size={48} />
-            <p>Drop your scanned image, PDF, Word doc, or audio file here, or click to browse</p>
-            <span>Supports JPG, PNG, PDF, DOCX, DOC, MP3, MP4, M4A, WAV, and other formats</span>
+            <p>Drop your file here, or click to browse</p>
+            <span>Images, PDFs, Word docs, audio, and video files</span>
           </>
         )}
       </div>
@@ -607,6 +656,7 @@ function MemoryUpload({ userId }) {
             <option value="email">Printed Email</option>
             <option value="photo">Photo with writing</option>
             <option value="audio">Audio/Voicemail</option>
+            <option value="video">Video Message</option>
             <option value="other">Other</option>
           </select>
         </div>
