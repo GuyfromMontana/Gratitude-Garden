@@ -2,6 +2,10 @@ import React, { useState, useRef } from 'react'
 import { Upload, Image, FileText, Loader, Check, AlertCircle } from 'lucide-react'
 import { uploadMemoryImage, createMemory, createGratitudeEntries } from '../lib/supabase'
 import { extractGratitudeEntries } from '../lib/ai-extraction'
+import * as pdfjsLib from 'pdfjs-dist'
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
 function MemoryUpload({ userId }) {
   const [dragOver, setDragOver] = useState(false)
@@ -20,6 +24,40 @@ function MemoryUpload({ userId }) {
   const [error, setError] = useState(null)
   
   const fileInputRef = useRef(null)
+
+  // Convert PDF to image (first page)
+  async function convertPdfToImage(pdfFile) {
+    try {
+      const arrayBuffer = await pdfFile.arrayBuffer()
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const page = await pdf.getPage(1) // Get first page
+      
+      const viewport = page.getViewport({ scale: 2.0 }) // Higher scale for better quality
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise
+      
+      // Convert canvas to blob
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+          // Create a File object from the blob
+          const imageFile = new File([blob], pdfFile.name.replace('.pdf', '.png'), { 
+            type: 'image/png' 
+          })
+          resolve(imageFile)
+        }, 'image/png')
+      })
+    } catch (err) {
+      console.error('PDF conversion error:', err)
+      throw new Error('Failed to convert PDF to image')
+    }
+  }
 
   function handleDragOver(e) {
     e.preventDefault()
@@ -48,21 +86,35 @@ function MemoryUpload({ userId }) {
     }
   }
 
-  function handleFileSelect(file) {
-    setSelectedFile(file)
-    setPreviewUrl(URL.createObjectURL(file))
+  async function handleFileSelect(file) {
+    // If it's a PDF, convert to image first
+    if (file.type === 'application/pdf') {
+      try {
+        setProcessing(true)
+        setProcessingStep('Converting PDF to image...')
+        const imageFile = await convertPdfToImage(file)
+        setSelectedFile(imageFile)
+        setPreviewUrl(URL.createObjectURL(imageFile))
+        setProcessing(false)
+        setProcessingStep('')
+      } catch (err) {
+        console.error('Error converting PDF:', err)
+        setError('Could not convert PDF. Please try an image file instead.')
+        setProcessing(false)
+        setProcessingStep('')
+        return
+      }
+    } else {
+      setSelectedFile(file)
+      setPreviewUrl(URL.createObjectURL(file))
+    }
+    
     setError(null)
     setSuccess(false)
   }
 
   async function extractTextFromImage() {
     if (!selectedFile) return
-    
-    // Only works for images, not PDFs
-    if (selectedFile.type === 'application/pdf') {
-      setError('OCR text extraction only works for images. Please manually type the text for PDFs.')
-      return
-    }
 
     try {
       setProcessing(true)
@@ -275,51 +327,39 @@ function MemoryUpload({ userId }) {
         
         {previewUrl ? (
           <div style={{ textAlign: 'center' }}>
-            {selectedFile.type === 'application/pdf' ? (
-              <div style={{ marginBottom: '1rem' }}>
-                <FileText size={48} style={{ color: 'var(--soft-gold)' }} />
-                <p style={{ color: 'var(--sage-green)', marginTop: '0.5rem' }}>
-                  <Check size={16} style={{ marginRight: '0.5rem' }} />
-                  {selectedFile.name}
-                </p>
-              </div>
-            ) : (
-              <>
-                <img 
-                  src={previewUrl} 
-                  alt="Preview" 
-                  style={{ 
-                    maxWidth: '100%', 
-                    maxHeight: '200px', 
-                    borderRadius: '8px',
-                    marginBottom: '1rem'
-                  }} 
-                />
-                <p style={{ color: 'var(--sage-green)' }}>
-                  <Check size={16} style={{ marginRight: '0.5rem' }} />
-                  {selectedFile.name}
-                </p>
-                <button
-                  type="button"
-                  onClick={extractTextFromImage}
-                  disabled={processing}
-                  className="btn btn-primary"
-                  style={{ marginTop: '1rem' }}
-                >
-                  {processing && processingStep.includes('Reading') ? (
-                    <>
-                      <Loader className="processing-spinner" size={16} />
-                      Extracting text...
-                    </>
-                  ) : (
-                    <>
-                      <FileText size={16} />
-                      Extract Text from Image
-                    </>
-                  )}
-                </button>
-              </>
-            )}
+            <img 
+              src={previewUrl} 
+              alt="Preview" 
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '200px', 
+                borderRadius: '8px',
+                marginBottom: '1rem'
+              }} 
+            />
+            <p style={{ color: 'var(--sage-green)' }}>
+              <Check size={16} style={{ marginRight: '0.5rem' }} />
+              {selectedFile.name}
+            </p>
+            <button
+              type="button"
+              onClick={extractTextFromImage}
+              disabled={processing}
+              className="btn btn-primary"
+              style={{ marginTop: '1rem' }}
+            >
+              {processing && processingStep.includes('Reading') ? (
+                <>
+                  <Loader className="processing-spinner" size={16} />
+                  Extracting text...
+                </>
+              ) : (
+                <>
+                  <FileText size={16} />
+                  Extract Text from Image
+                </>
+              )}
+            </button>
             <span style={{ display: 'block', marginTop: '1rem' }}>Click to change file</span>
           </div>
         ) : (
