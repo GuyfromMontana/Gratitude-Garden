@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { BookOpen, Search, X, Volume2, Calendar, User } from 'lucide-react'
-import { getMemories } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { generateSpeech, getSenderVoiceId, FALLBACK_VOICE_ID } from '../lib/elevenlabs'
 
 function MemoryBrowser({ userId }) {
@@ -25,7 +25,13 @@ function MemoryBrowser({ userId }) {
   async function loadMemories() {
     setLoading(true)
     try {
-      const data = await getMemories(userId)
+      const { data, error } = await supabase
+        .from('memories')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
       setMemories(data || [])
       setFilteredMemories(data || [])
     } catch (error) {
@@ -119,7 +125,6 @@ function MemoryBrowser({ userId }) {
 
       <p className="memory-count">{filteredMemories.length} memories</p>
 
-      {/* Memory Grid */}
       <div className="memory-grid">
         {filteredMemories.map(memory => (
           <div 
@@ -152,7 +157,6 @@ function MemoryBrowser({ userId }) {
         </div>
       )}
 
-      {/* Selected Memory Modal */}
       {selectedMemory && (
         <div className="memory-modal-overlay" onClick={() => setSelectedMemory(null)}>
           <div className="memory-modal" onClick={(e) => e.stopPropagation()}>
