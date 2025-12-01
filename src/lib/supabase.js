@@ -1,331 +1,214 @@
-import { createClient } from '@supabase/supabase-js'
+import React, { useState, useEffect } from 'react'
+import { BookOpen, Search, X, Volume2, Calendar, User } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { generateSpeech, getSenderVoiceId, FALLBACK_VOICE_ID } from '../lib/elevenlabs'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+function MemoryBrowser({ userId }) {
+  const [memories, setMemories] = useState([])
+  const [filteredMemories, setFilteredMemories] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedMemory, setSelectedMemory] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [playing, setPlaying] = useState(false)
+  const [audioElement, setAudioElement] = useState(null)
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials not found. Please check your .env file.')
-}
+  useEffect(() => {
+    if (userId) {
+      loadMemories()
+    }
+  }, [userId])
 
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
-)
+  useEffect(() => {
+    filterMemories()
+  }, [searchTerm, memories])
 
-// Helper function to upload image to Supabase Storage
-export async function uploadMemoryImage(file, userId) {
-  const fileExt = file.name.split('.').pop()
-  const fileName = `${userId}/${Date.now()}.${fileExt}`
-  
-  const { data, error } = await supabase.storage
-    .from('memory-images')
-    .upload(fileName, file)
-  
-  if (error) {
-    throw error
+  async function loadMemories() {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('memories')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      setMemories(data || [])
+      setFilteredMemories(data || [])
+    } catch (error) {
+      console.error('Error loading memories:', error)
+    } finally {
+      setLoading(false)
+    }
   }
-  
-  // Get public URL
-  const { data: { publicUrl } } = supabase.storage
-    .from('memory-images')
-    .getPublicUrl(fileName)
-  
-  return publicUrl
-}
 
-// Get daily gratitude entry using the database function
-export async function getDailyGratitude(userId) {
-  const { data, error } = await supabase
-    .rpc('get_daily_gratitude', { p_user_id: userId })
-  
-  if (error) {
-    throw error
+  function filterMemories() {
+    if (!searchTerm.trim()) {
+      setFilteredMemories(memories)
+      return
+    }
+    
+    const term = searchTerm.toLowerCase()
+    const filtered = memories.filter(memory => 
+      (memory.sender_name && memory.sender_name.toLowerCase().includes(term)) ||
+      (memory.occasion && memory.occasion.toLowerCase().includes(term)) ||
+      (memory.extracted_text && memory.extracted_text.toLowerCase().includes(term))
+    )
+    setFilteredMemories(filtered)
   }
-  
-  return data?.[0] || null
-}
 
-// Mark daily surface as viewed
-export async function markAsViewed(userId, entryId) {
-  const { error } = await supabase
-    .from('daily_surfaces')
-    .update({ 
-      was_viewed: true,
-      viewed_at: new Date().toISOString()
-    })
-    .eq('user_id', userId)
-    .eq('gratitude_entry_id', entryId)
-    .eq('surfaced_date', new Date().toISOString().split('T')[0])
-  
-  if (error) {
-    throw error
+  async function handleListen(memory) {
+    if (playing && audioElement) {
+      audioElement.pause()
+      setPlaying(false)
+      setAudioElement(null)
+      return
+    }
+
+    if (!memory.extracted_text) return
+
+    try {
+      setPlaying(true)
+      const voiceId = await getSenderVoiceId(userId, memory.sender_name) || FALLBACK_VOICE_ID
+      const audioUrl = await generateSpeech(memory.extracted_text, voiceId)
+      
+      const audio = new Audio(audioUrl)
+      setAudioElement(audio)
+      
+      audio.onended = () => {
+        setPlaying(false)
+        setAudioElement(null)
+      }
+      
+      audio.play()
+    } catch (error) {
+      console.error('Error playing audio:', error)
+      setPlaying(false)
+    }
   }
-}
 
-// Save a reflection
-export async function saveReflection(userId, entryId, reflectionText) {
-  const { data, error } = await supabase
-    .from('reflections')
-    .insert([{
-      user_id: userId,
-      gratitude_entry_id: entryId,
-      reflection_text: reflectionText
-    }])
-    .select()
-    .single()
-  
-  if (error) {
-    throw error
+  function formatDate(dateString) {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
   }
-  
-  // Link reflection to daily surface
-  await supabase
-    .from('daily_surfaces')
-    .update({ reflection_id: data.id })
-    .eq('user_id', userId)
-    .eq('gratitude_entry_id', entryId)
-    .eq('surfaced_date', new Date().toISOString().split('T')[0])
-  
-  return data
-}
 
-// Get all gratitude entries for browsing
-export async function getGratitudeEntries(userId, filters = {}) {
-  let query = supabase
-    .from('gratitude_entries')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-  
-  if (filters.theme) {
-    query = query.eq('core_theme', filters.theme)
+  if (loading) {
+    return (
+      <div className="browser-container">
+        <div className="browser-header">
+          <h2><BookOpen size={24} /> Memory Garden</h2>
+        </div>
+        <div className="loading-message">Loading your memories...</div>
+      </div>
+    )
   }
-  
-  if (filters.tag) {
-    query = query.contains('tags', [filters.tag])
-  }
-  
-  if (filters.season) {
-    query = query.eq('season', filters.season)
-  }
-  
-  const { data, error } = await query
-  
-  if (error) {
-    throw error
-  }
-  
-  return data || []
+
+  return (
+    <div className="browser-container">
+      <div className="browser-header">
+        <h2><BookOpen size={24} /> Memory Garden</h2>
+        <div className="search-box">
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Search by sender, occasion, or text..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} className="clear-search">
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className="memory-count">{filteredMemories.length} memories</p>
+
+      {/* Memory Grid */}
+      <div className="memory-grid">
+        {filteredMemories.map(memory => (
+          <div 
+            key={memory.id} 
+            className="memory-card"
+            onClick={() => setSelectedMemory(memory)}
+          >
+            {memory.original_image_url ? (
+              <img 
+                src={memory.original_image_url} 
+                alt={`From ${memory.sender_name || 'Unknown'}`}
+                className="memory-thumbnail"
+              />
+            ) : (
+              <div className="memory-placeholder">
+                <BookOpen size={32} />
+              </div>
+            )}
+            <div className="memory-card-info">
+              <span className="memory-sender">{memory.sender_name || 'Unknown'}</span>
+              {memory.occasion && <span className="memory-occasion">{memory.occasion}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filteredMemories.length === 0 && (
+        <div className="no-memories">
+          {searchTerm ? 'No memories match your search.' : 'No memories yet. Upload some!'}
+        </div>
+      )}
+
+      {/* Selected Memory Modal */}
+      {selectedMemory && (
+        <div className="memory-modal-overlay" onClick={() => setSelectedMemory(null)}>
+          <div className="memory-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setSelectedMemory(null)}>
+              <X size={24} />
+            </button>
+            
+            <div className="modal-content">
+              {selectedMemory.original_image_url && (
+                <img 
+                  src={selectedMemory.original_image_url} 
+                  alt={`From ${selectedMemory.sender_name || 'Unknown'}`}
+                  className="modal-image"
+                />
+              )}
+              
+              <div className="modal-details">
+                <div className="modal-meta">
+                  {selectedMemory.sender_name && (
+                    <span><User size={16} /> {selectedMemory.sender_name}</span>
+                  )}
+                  {selectedMemory.occasion && (
+                    <span><Calendar size={16} /> {selectedMemory.occasion}</span>
+                  )}
+                  {selectedMemory.date_received && (
+                    <span>{formatDate(selectedMemory.date_received)}</span>
+                  )}
+                </div>
+                
+                {selectedMemory.extracted_text && (
+                  <div className="modal-text">
+                    {selectedMemory.extracted_text}
+                  </div>
+                )}
+                
+                <button 
+                  className="listen-button"
+                  onClick={() => handleListen(selectedMemory)}
+                  disabled={!selectedMemory.extracted_text}
+                >
+                  <Volume2 size={18} />
+                  {playing ? 'Stop' : 'Listen'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
-// Get unique themes for filtering
-export async function getUniqueThemes(userId) {
-  const { data, error } = await supabase
-    .from('gratitude_entries')
-    .select('core_theme')
-    .eq('user_id', userId)
-  
-  if (error) {
-    throw error
-  }
-  
-  // Get unique themes
-  const themes = [...new Set(data.map(d => d.core_theme))]
-  return themes.filter(Boolean)
-}
-
-// Create a new memory record
-export async function createMemory(userId, memoryData) {
-  const { data, error } = await supabase
-    .from('memories')
-    .insert([{
-      user_id: userId,
-      ...memoryData
-    }])
-    .select()
-    .single()
-  
-  if (error) {
-    throw error
-  }
-  
-  return data
-}
-
-// Create gratitude entries from AI extraction
-export async function createGratitudeEntries(userId, memoryId, entries) {
-  const entriesWithIds = entries.map((entry, index) => ({
-    user_id: userId,
-    memory_id: memoryId,
-    entry_code: entry.entry_id || `MEM-${Date.now()}-${index}`,
-    core_theme: entry.core_theme,
-    summary_story: entry.summary_story,
-    specific_details: entry.specific_details || [],
-    reflection_prompt: entry.reflection_prompt,
-    tags: entry.tags || [],
-    season: inferSeason(entry),
-    holiday_associations: inferHolidays(entry)
-  }))
-  
-  const { data, error } = await supabase
-    .from('gratitude_entries')
-    .insert(entriesWithIds)
-    .select()
-  
-  if (error) {
-    throw error
-  }
-  
-  // Mark memory as processed
-  await supabase
-    .from('memories')
-    .update({ is_processed: true })
-    .eq('id', memoryId)
-  
-  return data
-}
-
-// Helper: Infer season from entry content
-function inferSeason(entry) {
-  const text = `${entry.core_theme} ${entry.summary_story} ${(entry.tags || []).join(' ')}`.toLowerCase()
-  
-  if (text.includes('christmas') || text.includes('winter') || text.includes('snow') || text.includes('holiday')) {
-    return 'winter'
-  }
-  if (text.includes('spring') || text.includes('easter') || text.includes('bloom') || text.includes('renewal')) {
-    return 'spring'
-  }
-  if (text.includes('summer') || text.includes('vacation') || text.includes('beach') || text.includes('july')) {
-    return 'summer'
-  }
-  if (text.includes('fall') || text.includes('autumn') || text.includes('thanksgiving') || text.includes('harvest')) {
-    return 'fall'
-  }
-  
-  return 'any'
-}
-
-// Helper: Infer holiday associations from entry content
-function inferHolidays(entry) {
-  const text = `${entry.core_theme} ${entry.summary_story} ${(entry.tags || []).join(' ')}`.toLowerCase()
-  const holidays = []
-  
-  if (text.includes('christmas') || text.includes('xmas')) holidays.push('Christmas')
-  if (text.includes('thanksgiving')) holidays.push('Thanksgiving')
-  if (text.includes('birthday')) holidays.push('Birthday')
-  if (text.includes('mother') && (text.includes('day') || text.includes('mom'))) holidays.push("Mother's Day")
-  if (text.includes('father') && (text.includes('day') || text.includes('dad'))) holidays.push("Father's Day")
-  if (text.includes('easter')) holidays.push('Easter')
-  if (text.includes('valentine')) holidays.push("Valentine's Day")
-  if (text.includes('anniversary')) holidays.push('Anniversary')
-  if (text.includes('new year')) holidays.push('New Year')
-  if (text.includes('graduation')) holidays.push('Graduation')
-  
-  return holidays
-}
-
-// ============================================
-// VOICE MANAGEMENT FUNCTIONS
-// ============================================
-
-// Get all voice mappings for a user
-export async function getSenderVoices(userId) {
-  const { data, error } = await supabase
-    .from('sender_voices')
-    .select('*')
-    .eq('user_id', userId)
-    .order('sender_name')
-  
-  if (error) throw error
-  return data || []
-}
-
-// Get voice for a specific sender
-export async function getVoiceForSender(userId, senderName) {
-  // First try exact match
-  let { data, error } = await supabase
-    .from('sender_voices')
-    .select('*')
-    .eq('user_id', userId)
-    .ilike('sender_name', senderName)
-    .single()
-  
-  if (data) return data
-  
-  // If no exact match, get default voice
-  const { data: defaultVoice } = await supabase
-    .from('sender_voices')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_default', true)
-    .single()
-  
-  return defaultVoice || null
-}
-
-// Add or update a sender voice mapping
-export async function upsertSenderVoice(userId, senderName, voiceId, notes = '') {
-  const { data, error } = await supabase
-    .from('sender_voices')
-    .upsert({
-      user_id: userId,
-      sender_name: senderName,
-      elevenlabs_voice_id: voiceId,
-      voice_notes: notes,
-      updated_at: new Date().toISOString()
-    }, {
-      onConflict: 'user_id,sender_name'
-    })
-    .select()
-    .single()
-  
-  if (error) throw error
-  return data
-}
-
-// Delete a sender voice mapping
-export async function deleteSenderVoice(userId, senderName) {
-  const { error } = await supabase
-    .from('sender_voices')
-    .delete()
-    .eq('user_id', userId)
-    .eq('sender_name', senderName)
-  
-  if (error) throw error
-}
-
-// Set default voice
-export async function setDefaultVoice(userId, senderName) {
-  // First, unset all defaults for this user
-  await supabase
-    .from('sender_voices')
-    .update({ is_default: false })
-    .eq('user_id', userId)
-  
-  // Then set the new default
-  const { data, error } = await supabase
-    .from('sender_voices')
-    .update({ is_default: true })
-    .eq('user_id', userId)
-    .eq('sender_name', senderName)
-    .select()
-    .single()
-  
-  if (error) throw error
-  return data
-}
-
-// Get all unique sender names from memories (for voice setup suggestions)
-export async function getUniqueSenders(userId) {
-  const { data, error } = await supabase
-    .from('memories')
-    .select('sender_name')
-    .eq('user_id', userId)
-    .not('sender_name', 'is', null)
-  
-  if (error) throw error
-  
-  // Get unique names
-  const uniqueNames = [...new Set(data.map(m => m.sender_name).filter(Boolean))]
-  return uniqueNames.sort()
-}
+export default MemoryBrowser
