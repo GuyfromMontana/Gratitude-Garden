@@ -1,68 +1,29 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { Home, Upload, BookOpen, Heart, Volume2 } from 'lucide-react'
+import { Home, Upload, BookOpen, Volume2, Heart, LogOut } from 'lucide-react'
+import { AuthProvider, useAuth } from './lib/auth.jsx'
+import AuthPage from './components/AuthPage.jsx'
 import DailyGratitude from './components/DailyGratitude'
 import MemoryUpload from './components/MemoryUpload'
 import MemoryBrowser from './components/MemoryBrowser'
 import VoiceManagement from './components/VoiceManagement'
-import { supabase } from './lib/supabase'
 
-function App() {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    // For Phase 1, we'll create/use a single user
-    initializeUser()
-  }, [])
-
-  async function initializeUser() {
-    try {
-      // Check if user exists, if not create one
-      let { data: users, error } = await supabase
-        .from('users')
-        .select('*')
-        .limit(1)
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching user:', error)
-      }
-
-      if (!users || users.length === 0) {
-        // Create initial user for Phase 1
-        const { data: newUser, error: createError } = await supabase
-          .from('users')
-          .insert([{ 
-            display_name: 'Guy',
-            email: 'guy@gratitudegarden.local'
-          }])
-          .select()
-          .single()
-
-        if (createError) {
-          console.error('Error creating user:', createError)
-        } else {
-          setUser(newUser)
-        }
-      } else {
-        setUser(users[0])
-      }
-    } catch (err) {
-      console.error('Init error:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+function AppContent() {
+  const { user, signOut, loading } = useAuth()
 
   if (loading) {
     return (
       <div className="loading-screen">
         <div className="loading-content">
           <Heart className="loading-icon" size={48} />
-          <p>Loading your memories...</p>
+          <p>Loading...</p>
         </div>
       </div>
     )
+  }
+
+  if (!user) {
+    return <AuthPage />
   }
 
   return (
@@ -76,6 +37,10 @@ function App() {
             </h1>
             <p className="app-subtitle">Cultivating appreciation from a lifetime of memories</p>
           </div>
+          <button onClick={signOut} className="logout-button">
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
         </header>
 
         <nav className="app-nav">
@@ -99,10 +64,10 @@ function App() {
 
         <main className="app-main">
           <Routes>
-            <Route path="/" element={<DailyGratitude userId={user?.id} />} />
-            <Route path="/upload" element={<MemoryUpload userId={user?.id} />} />
-            <Route path="/browse" element={<MemoryBrowser userId={user?.id} />} />
-            <Route path="/voices" element={<VoiceManagement userId={user?.id} />} />
+            <Route path="/" element={<DailyGratitude userId={user.id} />} />
+            <Route path="/upload" element={<MemoryUpload userId={user.id} />} />
+            <Route path="/browse" element={<MemoryBrowser userId={user.id} />} />
+            <Route path="/voices" element={<VoiceManagement userId={user.id} />} />
           </Routes>
         </main>
 
@@ -111,6 +76,14 @@ function App() {
         </footer>
       </div>
     </BrowserRouter>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }
 
