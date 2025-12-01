@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { BookOpen, Search, X, Volume2, Calendar, User } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { generateSpeech, getSenderVoiceId, FALLBACK_VOICE_ID } from '../lib/elevenlabs'
+import { speakText } from '../lib/elevenlabs'
 
 function MemoryBrowser({ userId }) {
   const [memories, setMemories] = useState([])
@@ -10,7 +10,6 @@ function MemoryBrowser({ userId }) {
   const [selectedMemory, setSelectedMemory] = useState(null)
   const [loading, setLoading] = useState(true)
   const [playing, setPlaying] = useState(false)
-  const [audioElement, setAudioElement] = useState(null)
 
   useEffect(() => {
     if (userId) {
@@ -57,29 +56,17 @@ function MemoryBrowser({ userId }) {
   }
 
   async function handleListen(memory) {
-    if (playing && audioElement) {
-      audioElement.pause()
+    if (!memory.extracted_text) return
+    
+    if (playing) {
       setPlaying(false)
-      setAudioElement(null)
       return
     }
 
-    if (!memory.extracted_text) return
-
     try {
       setPlaying(true)
-      const voiceId = await getSenderVoiceId(userId, memory.sender_name) || FALLBACK_VOICE_ID
-      const audioUrl = await generateSpeech(memory.extracted_text, voiceId)
-      
-      const audio = new Audio(audioUrl)
-      setAudioElement(audio)
-      
-      audio.onended = () => {
-        setPlaying(false)
-        setAudioElement(null)
-      }
-      
-      audio.play()
+      await speakText(memory.extracted_text, userId, memory.sender_name)
+      setPlaying(false)
     } catch (error) {
       console.error('Error playing audio:', error)
       setPlaying(false)
