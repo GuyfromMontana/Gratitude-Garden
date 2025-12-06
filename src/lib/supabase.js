@@ -328,4 +328,82 @@ export async function getUniqueSenders(userId) {
   // Get unique names
   const uniqueNames = [...new Set(data.map(m => m.sender_name).filter(Boolean))]
   return uniqueNames.sort()
+
+// ============================================
+// ADMIN: COPY MEMORIES TO FAMILY
+// ============================================
+
+// Get all users (for admin to select family members)
+export async function getAllUsers() {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, display_name, email')
+    .order('display_name')
+  
+  if (error) throw error
+  return data || []
+}
+
+// Copy a memory (and its gratitude entries) to another user
+export async function copyMemoryToUser(memoryId, targetUserId) {
+  // 1. Get the original memory
+  const { data: originalMemory, error: memError } = await supabase
+    .from('memories')
+    .select('*')
+    .eq('id', memoryId)
+    .single()
+  
+  if (memError) throw memError
+
+  // 2. Create copy of memory for target user
+  const { id, user_id, created_at, updated_at, ...memoryData } = originalMemory
+  
+  const { data: newMemory, error: createMemError } = await supabase
+    .from('memories')
+    .insert([{
+      ...memoryData,
+      user_id: targetUserId
+    }])
+    .select()
+    .single()
+  
+  if (createMemError) throw createMemError
+
+  // 3. Get original gratitude entries
+  const { data: originalEntries, error: entryError } = await supabase
+    .from('gratitude_entries')
+    .select('*')
+    .eq('memory_id', memoryId)
+  
+  if (entryError) throw entryError
+
+  // 4. Copy gratitude entries to new memory
+  if (originalEntries && originalEntries.length > 0) {
+    const newEntries = originalEntries.map(entry => {
+      const { id, user_id, memory_id, created_at, updated_at, ...entryData } = entry
+      return {
+        ...entryData,
+        user_id: targetUserId,
+        memory_id: newMemory.id
+      }
+    })
+
+    const { error: createEntryError } = await supabase
+      .from('gratitude_entries')
+      .insert(newEntries)
+    
+    if (createEntryError) throw createEntryError
+  }
+
+  return newMemory
+}
+
+// Copy multiple memories to a user
+export async function copyMemoriesToUser(memoryIds, targetUserId) {
+  const results = []
+  for (const memoryId of memoryIds) {
+    const result = await copyMemoryToUser(memoryId, targetUserId)
+    results.push(result)
+  }
+  return results
 }
