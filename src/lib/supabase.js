@@ -320,3 +320,14 @@ export async function copyMemoriesToUser(memoryIds, targetUserId) {
   }
   return results
 }
+
+export async function isUserAdmin(userId) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('is_admin')
+    .eq('id', userId)
+    .single()
+  
+  if (error) return false
+  return data?.is_admin || false
+}
