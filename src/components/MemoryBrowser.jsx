@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { BookOpen, Search, X, Volume2, Calendar, User } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { speakText } from '../lib/elevenlabs'
+import AdminPanel from './AdminPanel'
 
 function MemoryBrowser({ userId }) {
   const [memories, setMemories] = useState([])
@@ -192,8 +193,13 @@ function MemoryBrowser({ userId }) {
           </div>
         </div>
       )}
+
+      {/* Admin Panel for sharing memories with family */}
+      <AdminPanel userId={userId} />
     </div>
   )
 }
 
 export default MemoryBrowser
+```
+
