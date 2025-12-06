@@ -1041,4 +1041,118 @@ body {
   .memory-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+   /* ============================================
+   ADMIN PANEL
+   ============================================ */
+
+.admin-panel {
+  background: var(--warm-white);
+  border: 1px solid rgba(184, 149, 110, 0.2);
+  border-radius: 12px;
+  margin-top: var(--space-xl);
+  overflow: hidden;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-lg);
+  background: var(--parchment);
+  border-bottom: 1px solid rgba(184, 149, 110, 0.2);
+}
+
+.admin-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--deep-burgundy);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+}
+
+.admin-content {
+  padding: var(--space-lg);
+}
+
+.admin-description {
+  color: var(--warm-gray);
+  margin-bottom: var(--space-lg);
+  font-size: 0.95rem;
+}
+
+.memory-selection {
+  margin-top: var(--space-lg);
+}
+
+.selection-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  color: var(--warm-gray);
+  font-size: 0.9rem;
+}
+
+.selection-actions {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.memory-checklist {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid rgba(184, 149, 110, 0.2);
+  border-radius: 8px;
+}
+
+.memory-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-bottom: 1px solid rgba(184, 149, 110, 0.1);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.memory-check-item:hover {
+  background: var(--parchment);
+}
+
+.memory-check-item:last-child {
+  border-bottom: none;
+}
+
+.memory-check-item input[type="checkbox"] {
+  margin-top: 4px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.memory-check-info {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--charcoal);
+}
+
+.memory-check-info strong {
+  color: var(--deep-burgundy);
+}
+
+.memory-check-info small {
+  color: var(--warm-gray);
+  display: block;
+  margin-top: 4px;
+}
+
+.admin-message {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border-radius: 8px;
+  background: var(--parchment);
+  text-align: center;
+}
 }
