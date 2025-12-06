@@ -12,7 +12,6 @@ export const supabase = createClient(
   supabaseAnonKey || 'placeholder-key'
 )
 
-// Helper function to upload image to Supabase Storage
 export async function uploadMemoryImage(file, userId) {
   const fileExt = file.name.split('.').pop()
   const fileName = `${userId}/${Date.now()}.${fileExt}`
@@ -25,7 +24,6 @@ export async function uploadMemoryImage(file, userId) {
     throw error
   }
   
-  // Get public URL
   const { data: { publicUrl } } = supabase.storage
     .from('memory-images')
     .getPublicUrl(fileName)
@@ -33,7 +31,6 @@ export async function uploadMemoryImage(file, userId) {
   return publicUrl
 }
 
-// Get daily gratitude entry using the database function
 export async function getDailyGratitude(userId) {
   const { data, error } = await supabase
     .rpc('get_daily_gratitude', { p_user_id: userId })
@@ -45,7 +42,6 @@ export async function getDailyGratitude(userId) {
   return data?.[0] || null
 }
 
-// Mark daily surface as viewed
 export async function markAsViewed(userId, entryId) {
   const { error } = await supabase
     .from('daily_surfaces')
@@ -62,7 +58,6 @@ export async function markAsViewed(userId, entryId) {
   }
 }
 
-// Save a reflection
 export async function saveReflection(userId, entryId, reflectionText) {
   const { data, error } = await supabase
     .from('reflections')
@@ -78,7 +73,6 @@ export async function saveReflection(userId, entryId, reflectionText) {
     throw error
   }
   
-  // Link reflection to daily surface
   await supabase
     .from('daily_surfaces')
     .update({ reflection_id: data.id })
@@ -89,7 +83,6 @@ export async function saveReflection(userId, entryId, reflectionText) {
   return data
 }
 
-// Get all gratitude entries for browsing
 export async function getGratitudeEntries(userId, filters = {}) {
   let query = supabase
     .from('gratitude_entries')
@@ -118,7 +111,6 @@ export async function getGratitudeEntries(userId, filters = {}) {
   return data || []
 }
 
-// Get unique themes for filtering
 export async function getUniqueThemes(userId) {
   const { data, error } = await supabase
     .from('gratitude_entries')
@@ -129,12 +121,10 @@ export async function getUniqueThemes(userId) {
     throw error
   }
   
-  // Get unique themes
   const themes = [...new Set(data.map(d => d.core_theme))]
   return themes.filter(Boolean)
 }
 
-// Create a new memory record
 export async function createMemory(userId, memoryData) {
   const { data, error } = await supabase
     .from('memories')
@@ -152,7 +142,6 @@ export async function createMemory(userId, memoryData) {
   return data
 }
 
-// Create gratitude entries from AI extraction
 export async function createGratitudeEntries(userId, memoryId, entries) {
   const entriesWithIds = entries.map((entry, index) => ({
     user_id: userId,
@@ -176,7 +165,6 @@ export async function createGratitudeEntries(userId, memoryId, entries) {
     throw error
   }
   
-  // Mark memory as processed
   await supabase
     .from('memories')
     .update({ is_processed: true })
@@ -185,7 +173,6 @@ export async function createGratitudeEntries(userId, memoryId, entries) {
   return data
 }
 
-// Helper: Infer season from entry content
 function inferSeason(entry) {
   const text = `${entry.core_theme} ${entry.summary_story} ${(entry.tags || []).join(' ')}`.toLowerCase()
   
@@ -205,7 +192,6 @@ function inferSeason(entry) {
   return 'any'
 }
 
-// Helper: Infer holiday associations from entry content
 function inferHolidays(entry) {
   const text = `${entry.core_theme} ${entry.summary_story} ${(entry.tags || []).join(' ')}`.toLowerCase()
   const holidays = []
@@ -224,11 +210,6 @@ function inferHolidays(entry) {
   return holidays
 }
 
-// ============================================
-// VOICE MANAGEMENT FUNCTIONS
-// ============================================
-
-// Get all voice mappings for a user
 export async function getSenderVoices(userId) {
   const { data, error } = await supabase
     .from('sender_voices')
@@ -240,9 +221,7 @@ export async function getSenderVoices(userId) {
   return data || []
 }
 
-// Get voice for a specific sender
 export async function getVoiceForSender(userId, senderName) {
-  // First try exact match
   let { data, error } = await supabase
     .from('sender_voices')
     .select('*')
@@ -252,7 +231,6 @@ export async function getVoiceForSender(userId, senderName) {
   
   if (data) return data
   
-  // If no exact match, get default voice
   const { data: defaultVoice } = await supabase
     .from('sender_voices')
     .select('*')
@@ -263,7 +241,6 @@ export async function getVoiceForSender(userId, senderName) {
   return defaultVoice || null
 }
 
-// Add or update a sender voice mapping
 export async function upsertSenderVoice(userId, senderName, voiceId, notes = '') {
   const { data, error } = await supabase
     .from('sender_voices')
@@ -283,7 +260,6 @@ export async function upsertSenderVoice(userId, senderName, voiceId, notes = '')
   return data
 }
 
-// Delete a sender voice mapping
 export async function deleteSenderVoice(userId, senderName) {
   const { error } = await supabase
     .from('sender_voices')
@@ -294,15 +270,12 @@ export async function deleteSenderVoice(userId, senderName) {
   if (error) throw error
 }
 
-// Set default voice
 export async function setDefaultVoice(userId, senderName) {
-  // First, unset all defaults for this user
   await supabase
     .from('sender_voices')
     .update({ is_default: false })
     .eq('user_id', userId)
   
-  // Then set the new default
   const { data, error } = await supabase
     .from('sender_voices')
     .update({ is_default: true })
@@ -315,7 +288,6 @@ export async function setDefaultVoice(userId, senderName) {
   return data
 }
 
-// Get all unique sender names from memories (for voice setup suggestions)
 export async function getUniqueSenders(userId) {
   const { data, error } = await supabase
     .from('memories')
@@ -325,80 +297,21 @@ export async function getUniqueSenders(userId) {
   
   if (error) throw error
   
-  // Get unique names
   const uniqueNames = [...new Set(data.map(m => m.sender_name).filter(Boolean))]
   return uniqueNames.sort()
+}
 
-// ============================================
-// ADMIN: COPY MEMORIES TO FAMILY
-// ============================================
-
-// Get all users (for admin to select family members)
-export async function getAllUsers() {
+export async function copyMemoryToUser(memoryId, targetUserId) {
   const { data, error } = await supabase
-    .from('users')
-    .select('id, display_name, email')
-    .order('display_name')
+    .rpc('copy_memory_to_user', {
+      source_memory_id: memoryId,
+      target_user_id: targetUserId
+    })
   
   if (error) throw error
-  return data || []
+  return data
 }
 
-// Copy a memory (and its gratitude entries) to another user
-export async function copyMemoryToUser(memoryId, targetUserId) {
-  // 1. Get the original memory
-  const { data: originalMemory, error: memError } = await supabase
-    .from('memories')
-    .select('*')
-    .eq('id', memoryId)
-    .single()
-  
-  if (memError) throw memError
-
-  // 2. Create copy of memory for target user
-  const { id, user_id, created_at, updated_at, ...memoryData } = originalMemory
-  
-  const { data: newMemory, error: createMemError } = await supabase
-    .from('memories')
-    .insert([{
-      ...memoryData,
-      user_id: targetUserId
-    }])
-    .select()
-    .single()
-  
-  if (createMemError) throw createMemError
-
-  // 3. Get original gratitude entries
-  const { data: originalEntries, error: entryError } = await supabase
-    .from('gratitude_entries')
-    .select('*')
-    .eq('memory_id', memoryId)
-  
-  if (entryError) throw entryError
-
-  // 4. Copy gratitude entries to new memory
-  if (originalEntries && originalEntries.length > 0) {
-    const newEntries = originalEntries.map(entry => {
-      const { id, user_id, memory_id, created_at, updated_at, ...entryData } = entry
-      return {
-        ...entryData,
-        user_id: targetUserId,
-        memory_id: newMemory.id
-      }
-    })
-
-    const { error: createEntryError } = await supabase
-      .from('gratitude_entries')
-      .insert(newEntries)
-    
-    if (createEntryError) throw createEntryError
-  }
-
-  return newMemory
-}
-
-// Copy multiple memories to a user
 export async function copyMemoriesToUser(memoryIds, targetUserId) {
   const results = []
   for (const memoryId of memoryIds) {
