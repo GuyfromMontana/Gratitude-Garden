@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Users, Copy, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
-import { getGratitudeEntries, copyMemoriesToUser } from '../lib/supabase'
-import { supabase } from '../lib/supabase'
+import { Users, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { supabase, copyMemoriesToUser } from '../lib/supabase'
 
 export default function AdminPanel({ userId }) {
   const [memories, setMemories] = useState([])
-  const [familyMembers, setFamilyMembers] = useState([])
   const [selectedMemories, setSelectedMemories] = useState([])
   const [targetUser, setTargetUser] = useState('')
   const [loading, setLoading] = useState(true)
   const [copying, setCopying] = useState(false)
   const [message, setMessage] = useState('')
   const [expanded, setExpanded] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -19,7 +18,18 @@ export default function AdminPanel({ userId }) {
 
   async function loadData() {
     try {
-      // Load user's memories
+      const { data: userData } = await supabase
+        .from('users')
+        .select('is_admin')
+        .eq('id', userId)
+        .single()
+
+      if (!userData?.is_admin) {
+        setLoading(false)
+        return
+      }
+      setIsAdmin(true)
+
       const { data: mems, error: memError } = await supabase
         .from('memories')
         .select('id, sender_name, occasion, date_received, extracted_text')
@@ -28,17 +38,6 @@ export default function AdminPanel({ userId }) {
       
       if (memError) throw memError
       setMemories(mems || [])
-
-      // Load all auth users (family members)
-      const { data: { users }, error: usersError } = await supabase.auth.admin.listUsers()
-      
-      if (usersError) {
-        // Fallback: If admin API not available, we'll add manually
-        console.log('Admin API not available, using manual family list')
-        setFamilyMembers([])
-      } else {
-        setFamilyMembers(users?.filter(u => u.id !== userId) || [])
-      }
     } catch (err) {
       console.error('Error loading data:', err)
     } finally {
@@ -88,7 +87,11 @@ export default function AdminPanel({ userId }) {
   }
 
   if (loading) {
-    return <div className="loading-message">Loading admin panel...</div>
+    return null
+  }
+
+  if (!isAdmin) {
+    return null
   }
 
   return (
@@ -112,7 +115,6 @@ export default function AdminPanel({ userId }) {
             memories in their own accounts.
           </p>
 
-          {/* Target User Selection */}
           <div className="form-group">
             <label className="form-label">Family Member's User ID</label>
             <input
@@ -127,7 +129,6 @@ export default function AdminPanel({ userId }) {
             </small>
           </div>
 
-          {/* Memory Selection */}
           <div className="memory-selection">
             <div className="selection-header">
               <span>{selectedMemories.length} of {memories.length} selected</span>
@@ -157,7 +158,6 @@ export default function AdminPanel({ userId }) {
             </div>
           </div>
 
-          {/* Copy Button */}
           <button 
             onClick={handleCopy} 
             className="btn btn-primary"
